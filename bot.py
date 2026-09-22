@@ -1,113 +1,64 @@
-import asyncio
+import os
 import logging
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, ContextTypes
+from threading import Thread
+from http.server import HTTPServer, BaseHTTPRequestHandler
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-# ==================== CONFIGURATION ====================
-BOT_TOKEN = "8955451526:AAE4aCJvWElPVqRDidEKWxH_hl3ggflo9J0"
-STORAGE_CHANNEL_ID = -1002340619256
-
-# Dono required channels ki Details
-CHANNEL_1_ID = -1003712791002
-CHANNEL_1_LINK = "https://t.me/+QyaE1JF3ECs4NmVl"
-
-CHANNEL_2_ID = -1002530222523
-CHANNEL_2_LINK = "https://t.me/+d5YwXxXXUgA0NjY1"
-# ========================================================
-
+# Logging setup
 logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
 )
 
-async def is_member(context: ContextTypes.DEFAULT_TYPE, channel_id: int, user_id: int) -> bool:
-    try:
-        member = await context.bot.get_chat_member(chat_id=channel_id, user_id=user_id)
-        if member.status in ['creator', 'administrator', 'member']:
-            return True
-        return False
-    except Exception as e:
-        print(f"Error checking channel {channel_id}: {e}")
-        return False
+# ----------------------------------------------------
+# 1. RENDER PORT ERROR FIX (DUMMY WEB SERVER)
+# ----------------------------------------------------
+class DummyServer(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is live and running 24/7!")
 
-async def delete_messages_later(context: ContextTypes.DEFAULT_TYPE, chat_id: int, message_ids: list, delay: int):
-    await asyncio.sleep(delay)
-    for msg_id in message_ids:
-        try:
-            await context.bot.delete_message(chat_id=chat_id, message_id=msg_id)
-        except Exception as e:
-            print(f"Failed to delete message {msg_id}: {e}")
+def start_server():
+    port = int(os.environ.get("PORT", 8080))
+    server = HTTPServer(('0.0.0.0', port), DummyServer)
+    server.serve_forever()
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    chat_id = update.effective_chat.id
+# Dummy server ko background thread me start karein
+Thread(target=start_server, daemon=True).start()
+
+# ----------------------------------------------------
+# 2. TELEGRAM BOT HANDLERS & LOGIC
+# ----------------------------------------------------
+async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_first_name = update.effective_user.first_name
     
+    # Agar start command me koi file/video ID aayi hai (Jaise /start 24)
     if context.args:
         file_id = context.args[0]
-        
-        joined_c1 = await is_member(context, CHANNEL_1_ID, user.id)
-        joined_c2 = await is_member(context, CHANNEL_2_ID, user.id)
-        
-        if not (joined_c1 and joined_c2):
-            try_again_url = f"https://t.me/{context.bot.username}?start={file_id}"
-            
-            keyboard = [
-                [InlineKeyboardButton("📢 Join Channel 1", url=CHANNEL_1_LINK)],
-                [InlineKeyboardButton("📢 Join Channel 2", url=CHANNEL_2_LINK)],
-                [InlineKeyboardButton("🔄 Try Again", url=try_again_url)]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            await update.message.reply_text(
-                "⚠️ **Access Denied!**\n\n"
-                "You must join both of our official channels to access this video.\n"
-                "Please click the **Join Channel** buttons below, join both channels, and then click **Try Again**.",
-                reply_markup=reply_markup,
-                parse_mode="Markdown"
-            )
-            return
+        await update.message.reply_text(f"Hello {user_first_name}! Processing your request for file ID: {file_id}...")
+        # Yahan aapki file/video sending ki specific logic aayegi
+    else:
+        await update.message.reply_text(f"Hello {user_first_name}! Welcome to the File Store Bot.")
 
-        try:
-            msg_id = int(file_id)
-            
-            warning_msg = await context.bot.send_message(
-                chat_id=chat_id,
-                text="⏳ **Important Notice:**\n\n"
-                     "This video will be automatically deleted in **10 minutes** due to copyright protection.\n"
-                     "Please forward this video to your **Saved Messages** immediately if you wish to keep it!",
-                parse_mode="Markdown"
-            )
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Send me a valid file link or command to get files.")
 
-            video_msg = await context.bot.copy_message(
-                chat_id=chat_id,
-                from_chat_id=STORAGE_CHANNEL_ID,
-                message_id=msg_id
-            )
+# ----------------------------------------------------
+# 3. MAIN BOT EXECUTION
+# ----------------------------------------------------
+if __name__ == '__main__':
+    # Apne Bot Token ko yahan replace karein agar Environment Variable use nahi kar rahe hain
+    BOT_TOKEN = os.environ.get("BOT_TOKEN", "8955451526:AAE4aCJvWE1PVqRDidEKWxH_hl3ggflo9J0")
 
-            asyncio.create_task(
-                delete_messages_later(
-                    context=context,
-                    chat_id=chat_id,
-                    message_ids=[warning_msg.message_id, video_msg.message_id],
-                    delay=600
-                )
-            )
-            return
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-        except Exception as e:
-            await update.message.reply_text("❌ Video not found or link has expired.")
-            print(f"Error sending video: {e}")
-            return
+    # Handlers add karein
+    app.add_handler(CommandHandler("start", start_command))
+    app.add_handler(CommandHandler("help", help_command))
 
-    await update.message.reply_text(
-        f"Hello {user.first_name}!\n\nWelcome to File Store Bot. Click on any valid video link to request content."
-    )
-
-def main():
-    app = Application.builder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    
-    print("Bot is running...")
+    print("Bot starting polling...")
     app.run_polling()
 
-if __name__ == "__main__":
-    main()
+            
