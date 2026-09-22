@@ -34,11 +34,9 @@ Thread(target=start_server, daemon=True).start()
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_first_name = update.effective_user.first_name
     
-    # Agar start command me koi file/video ID aayi hai (Jaise /start 24)
     if context.args:
         file_id = context.args[0]
         await update.message.reply_text(f"Hello {user_first_name}! Processing your request for file ID: {file_id}...")
-        # Yahan aapki file/video sending ki specific logic aayegi
     else:
         await update.message.reply_text(f"Hello {user_first_name}! Welcome to the File Store Bot.")
 
@@ -49,16 +47,13 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # 3. MAIN BOT EXECUTION
 # ----------------------------------------------------
 if __name__ == '__main__':
-    # Apne Bot Token ko yahan replace karein agar Environment Variable use nahi kar rahe hain
-    BOT_TOKEN = os.environ.get("BOT_TOKEN", "8955451526:AAE4aCJvWE1PVqRDidEKWxH_hl3ggflo9J0")
+    # Naya Bot Token
+    BOT_TOKEN = os.environ.get("BOT_TOKEN", "8955451526:AAFjV1YMFC51zgflyDmyDX3-8WbSIa5lRv4")
 
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # Handlers add karein
     app.add_handler(CommandHandler("start", start_command))
     app.add_handler(CommandHandler("help", help_command))
 
     print("Bot starting polling...")
     app.run_polling()
-
-            
